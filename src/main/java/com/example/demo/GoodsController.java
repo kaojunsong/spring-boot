@@ -1,18 +1,29 @@
 package com.example.demo;
 
+import org.apache.lucene.search.join.ScoreMode;
+import org.elasticsearch.action.search.SearchResponse;
+import org.elasticsearch.index.query.BoolQueryBuilder;
+import org.elasticsearch.index.query.QueryBuilder;
 import org.elasticsearch.index.query.QueryBuilders;
 import org.elasticsearch.index.query.functionscore.FunctionScoreQueryBuilder;
+import org.elasticsearch.search.SearchHits;
 import org.elasticsearch.search.aggregations.AbstractAggregationBuilder;
 import org.elasticsearch.search.aggregations.AggregationBuilder;
 import org.elasticsearch.search.aggregations.AggregationBuilders;
+import org.elasticsearch.search.aggregations.Aggregations;
 import org.elasticsearch.search.aggregations.bucket.nested.InternalNested;
 import org.elasticsearch.search.aggregations.metrics.avg.AvgAggregationBuilder;
 import org.elasticsearch.search.aggregations.metrics.avg.InternalAvg;
+import org.elasticsearch.search.aggregations.metrics.sum.SumAggregationBuilder;
+import org.elasticsearch.search.aggregations.metrics.valuecount.InternalValueCount;
+import org.elasticsearch.search.aggregations.metrics.valuecount.ValueCount;
+import org.elasticsearch.search.aggregations.metrics.valuecount.ValueCountAggregationBuilder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.elasticsearch.core.ElasticsearchTemplate;
+import org.springframework.data.elasticsearch.core.ResultsExtractor;
 import org.springframework.data.elasticsearch.core.query.NativeSearchQueryBuilder;
 import org.springframework.data.elasticsearch.core.query.SearchQuery;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -40,9 +51,11 @@ public class GoodsController {
         GoodsInfo goodsInfo = new GoodsInfo(System.currentTimeMillis(),
                 "商品" + System.currentTimeMillis(), "这是一个测试商品");
 
-        Map<String,Integer> map=new HashMap<>();
-        map.put("orderCount",77);
-        map.put("rt",100);
+        Map<String, Object> map = new HashMap<>();
+        map.put("orderCount", 7);
+        map.put("rt", 15);
+        map.put("issuccess", "false");
+        map.put("tracer_id", "123qwe");
         goodsInfo.setExt(map);
         goodsRepository.save(goodsInfo);
         return "success";
@@ -74,6 +87,7 @@ public class GoodsController {
 
     //每页数量
     private Integer PAGESIZE = 10;
+
     //http://localhost:8081/getGoodsList?query=商品
     //http://localhost:8081/getGoodsList?query=商品&pageNumber=1
     //根据关键字"商品"去查询列表，name或者description包含的都查询
@@ -88,26 +102,52 @@ public class GoodsController {
 
     @GetMapping("getSum")
     public Double getSum() {
-       return this.sum();
+        return this.sum();
     }
 
 
-    private double sum(){
-        //QueryBuilder queryBuilder = QueryBuilders.nestedQuery("ext","ext.orderCoun",ScoreMode.None);
-//        SumAggregationBuilder sumBuilder = AggregationBuilders.sum("sum").field("ext.orderCount");
-        AvgAggregationBuilder sumBuilder = AggregationBuilders.avg("sum").field("ext.orderCount");
-        AggregationBuilder aggregationBuilder = AggregationBuilders.nested("nested", "ext").subAggregation(sumBuilder);
+    @GetMapping("getCount")
+    public Long getCount() {
+        return this.count();
+    }
+
+    private long count() {
+        ValueCountAggregationBuilder valueCountAggregationBuilder = AggregationBuilders.count("count").field("id");
+        //AggregationBuilder aggregationBuilder = AggregationBuilders.nested("nested", "ext").subAggregation(sumBuilder);
+
+        BoolQueryBuilder builder = QueryBuilders.boolQuery();
+        builder.must(QueryBuilders.nestedQuery("ext", QueryBuilders.matchQuery("ext.issuccess", "false"), ScoreMode.None));
+
+        SearchQuery searchQuery = new NativeSearchQueryBuilder()
+                .withIndices("testgoods")
+                .withTypes("goods").withQuery(builder)
+                .addAggregation((AbstractAggregationBuilder) valueCountAggregationBuilder).build();
+
+        long saleAmount = elasticsearchTemplate.query(searchQuery, response -> {
+            InternalValueCount sum = (InternalValueCount) response.getAggregations().asList().get(0);
+            return sum.getValue();
+        });
+        return saleAmount;
+    }
+
+
+    private double sum() {
+        AbstractAggregationBuilder aggregation = AggregationBuilders.terms("sum").field("ext.orderCount");
+
         SearchQuery searchQuery = new NativeSearchQueryBuilder()
                 .withIndices("testgoods")
                 .withTypes("goods")
-                .addAggregation((AbstractAggregationBuilder) aggregationBuilder).build();
+                .addAggregation(AggregationBuilders.sum("sum").field("ext.orderCount"))
+                .build();
 
-        double saleAmount = elasticsearchTemplate.query(searchQuery, response -> {
-            InternalNested sum = (InternalNested) response.getAggregations().asList().get(0);
-//            return ((InternalSum)sum.getAggregations().get("sum")).getValue();
-            return ((InternalAvg)sum.getAggregations().get("sum")).getValue();
-        });
-        return saleAmount;
+        Aggregations aggregations = elasticsearchTemplate.query(searchQuery,
+                new ResultsExtractor<Aggregations>() {
+                    @Override
+                    public Aggregations extract(SearchResponse response) {
+                        return response.getAggregations();
+                    }
+                });
+        return 0;
     }
 
 

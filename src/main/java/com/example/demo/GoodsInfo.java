@@ -15,8 +15,11 @@ public class GoodsInfo implements Serializable {
     private String name;
     private String description;
 
-    @Field(type = FieldType.Nested)
-    private Map<String,Integer> ext;
+    @Field
+    //private Map<String, Object> attr;
+
+    //@Field(type = FieldType.Nested)
+    private Map<String, Object> ext;
 
     public Long getId() {
         return id;
@@ -42,11 +45,19 @@ public class GoodsInfo implements Serializable {
         this.description = description;
     }
 
-    public Map<String, Integer> getExt() {
+    public Map<String, Object> getExt() {
         return ext;
     }
 
-    public void setExt(Map<String, Integer> ext) {
+//    public Map<String, Object> getAttr() {
+//        return attr;
+//    }
+//
+//    public void setAttr(Map<String, Object> attr) {
+//        this.attr = attr;
+//    }
+
+    public void setExt(Map<String, Object> ext) {
         this.ext = ext;
     }
 
