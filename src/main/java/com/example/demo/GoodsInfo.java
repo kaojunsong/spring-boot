@@ -7,7 +7,7 @@ import org.springframework.data.elasticsearch.annotations.FieldType;
 import java.io.Serializable;
 import java.util.Map;
 
-@Document(indexName = "testgoods", type = "goods")
+@Document(indexName = "testgoods",type = "goods")
 //indexName索引名称 可以理解为数据库名 必须为小写 不然会报org.elasticsearch.indices.InvalidIndexNameException异常
 //type类型 可以理解为表名
 public class GoodsInfo implements Serializable {
@@ -15,10 +15,9 @@ public class GoodsInfo implements Serializable {
     private String name;
     private String description;
 
-    @Field
-    //private Map<String, Object> attr;
+    private Map<String, Object> attr;
 
-    //@Field(type = FieldType.Nested)
+    @Field(type = FieldType.Nested)
     private Map<String, Object> ext;
 
     public Long getId() {
@@ -49,13 +48,13 @@ public class GoodsInfo implements Serializable {
         return ext;
     }
 
-//    public Map<String, Object> getAttr() {
-//        return attr;
-//    }
-//
-//    public void setAttr(Map<String, Object> attr) {
-//        this.attr = attr;
-//    }
+    public Map<String, Object> getAttr() {
+        return attr;
+    }
+
+    public void setAttr(Map<String, Object> attr) {
+        this.attr = attr;
+    }
 
     public void setExt(Map<String, Object> ext) {
         this.ext = ext;

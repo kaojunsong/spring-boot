@@ -2,28 +2,25 @@ package com.example.demo;
 
 import org.apache.lucene.search.join.ScoreMode;
 import org.elasticsearch.action.search.SearchResponse;
+import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.index.query.BoolQueryBuilder;
-import org.elasticsearch.index.query.QueryBuilder;
 import org.elasticsearch.index.query.QueryBuilders;
 import org.elasticsearch.index.query.functionscore.FunctionScoreQueryBuilder;
-import org.elasticsearch.search.SearchHits;
 import org.elasticsearch.search.aggregations.AbstractAggregationBuilder;
-import org.elasticsearch.search.aggregations.AggregationBuilder;
 import org.elasticsearch.search.aggregations.AggregationBuilders;
 import org.elasticsearch.search.aggregations.Aggregations;
-import org.elasticsearch.search.aggregations.bucket.nested.InternalNested;
-import org.elasticsearch.search.aggregations.metrics.avg.AvgAggregationBuilder;
-import org.elasticsearch.search.aggregations.metrics.avg.InternalAvg;
-import org.elasticsearch.search.aggregations.metrics.sum.SumAggregationBuilder;
 import org.elasticsearch.search.aggregations.metrics.valuecount.InternalValueCount;
-import org.elasticsearch.search.aggregations.metrics.valuecount.ValueCount;
 import org.elasticsearch.search.aggregations.metrics.valuecount.ValueCountAggregationBuilder;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.elasticsearch.ElasticsearchException;
 import org.springframework.data.elasticsearch.core.ElasticsearchTemplate;
+
 import org.springframework.data.elasticsearch.core.ResultsExtractor;
+import org.springframework.data.elasticsearch.core.mapping.ElasticsearchPersistentEntity;
+import org.springframework.data.elasticsearch.core.mapping.ElasticsearchPersistentProperty;
+import org.springframework.data.elasticsearch.core.query.IndexQueryBuilder;
 import org.springframework.data.elasticsearch.core.query.NativeSearchQueryBuilder;
 import org.springframework.data.elasticsearch.core.query.SearchQuery;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -31,21 +28,15 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 @RestController
 @RequestMapping("/")
 public class GoodsController {
 
     @Autowired
-    private GoodsRepository goodsRepository;
-
-    @Autowired
     private ElasticsearchTemplate elasticsearchTemplate;
 
-    //http://localhost:8081/save
     @RequestMapping("save")
     public String save() {
         GoodsInfo goodsInfo = new GoodsInfo(System.currentTimeMillis(),
@@ -57,48 +48,36 @@ public class GoodsController {
         map.put("issuccess", "false");
         map.put("tracer_id", "123qwe");
         goodsInfo.setExt(map);
-        goodsRepository.save(goodsInfo);
+
+        String indexName= "testgoods_" + DateTimeUtil.currentDate(DateTimeUtil.HH_MM_SS_PATTERN);
+        if(!elasticsearchTemplate.indexExists(indexName)){
+            elasticsearchTemplate.createIndex(indexName);
+
+            ElasticsearchPersistentEntity persistentEntity = elasticsearchTemplate.getPersistentEntityFor(GoodsInfo.class);
+            XContentBuilder xContentBuilder = this.createXContentBuilder(persistentEntity, GoodsInfo.class);
+            elasticsearchTemplate.putMapping(indexName, "goods", xContentBuilder);
+        }
+
+        IndexQueryBuilder indexQueryBuilder = new IndexQueryBuilder().withIndexName(indexName).withType("goods").withObject(goodsInfo);
+        elasticsearchTemplate.index(indexQueryBuilder.build());
+
         return "success";
     }
 
-    //http://localhost:8081/delete?id=1525415333329
-    @GetMapping("delete")
-    public String delete(long id) {
-        goodsRepository.deleteById(id);
-        return "success";
+
+    private XContentBuilder createXContentBuilder(ElasticsearchPersistentEntity persistentEntity, Class clazz) {
+        XContentBuilder xContentBuilder = null;
+        try {
+            ElasticsearchPersistentProperty property = (ElasticsearchPersistentProperty) persistentEntity.getRequiredIdProperty();
+            xContentBuilder = MappingBuilder.buildMapping(clazz, persistentEntity.getIndexType(),
+                    property.getFieldName(), null
+            );
+        } catch (Exception e) {
+            throw new ElasticsearchException("Failed to build mapping for " + clazz.getSimpleName(), e);
+        }
+        return xContentBuilder;
     }
 
-    //http://localhost:8081/update?id=1525417362754&name=修改&description=修改
-    @GetMapping("update")
-    public String update(long id, String name, String description) {
-        GoodsInfo goodsInfo = new GoodsInfo(id,
-                name, description);
-        goodsRepository.save(goodsInfo);
-        return "success";
-    }
-
-    //http://localhost:8081/getOne?id=1525417362754
-    @GetMapping("getOne")
-    public GoodsInfo getOne(long id) {
-        Optional<GoodsInfo> optionalGoodsInfo = goodsRepository.findById(id);
-        return optionalGoodsInfo.get();
-    }
-
-
-    //每页数量
-    private Integer PAGESIZE = 10;
-
-    //http://localhost:8081/getGoodsList?query=商品
-    //http://localhost:8081/getGoodsList?query=商品&pageNumber=1
-    //根据关键字"商品"去查询列表，name或者description包含的都查询
-    @GetMapping("getGoodsList")
-    public List<GoodsInfo> getList(Integer pageNumber, String query) {
-        if (pageNumber == null) pageNumber = 0;
-        //es搜索默认第一页页码是0
-        SearchQuery searchQuery = getEntitySearchQuery(pageNumber, PAGESIZE, query);
-        Page<GoodsInfo> goodsPage = goodsRepository.search(searchQuery);
-        return goodsPage.getContent();
-    }
 
     @GetMapping("getSum")
     public Double getSum() {
@@ -119,7 +98,7 @@ public class GoodsController {
         builder.must(QueryBuilders.nestedQuery("ext", QueryBuilders.matchQuery("ext.issuccess", "false"), ScoreMode.None));
 
         SearchQuery searchQuery = new NativeSearchQueryBuilder()
-                .withIndices("testgoods")
+                .withIndices("testgoods*")
                 .withTypes("goods").withQuery(builder)
                 .addAggregation((AbstractAggregationBuilder) valueCountAggregationBuilder).build();
 
