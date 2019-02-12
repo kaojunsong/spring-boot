@@ -39,27 +39,30 @@ public class GoodsController {
 
     @RequestMapping("save")
     public String save() {
-        GoodsInfo goodsInfo = new GoodsInfo(System.currentTimeMillis(),
-                "商品" + System.currentTimeMillis(), "这是一个测试商品");
 
-        Map<String, Object> map = new HashMap<>();
-        map.put("orderCount", 7);
-        map.put("rt", 15);
-        map.put("issuccess", "false");
-        map.put("tracer_id", "123qwe");
-        goodsInfo.setExt(map);
+        for (int i = 0; i < 100000; i++) {
+            GoodsInfo goodsInfo = new GoodsInfo(System.currentTimeMillis(),
+                    "商品" + System.currentTimeMillis(), "这是一个测试商品");
 
-        String indexName= "testgoods_" + DateTimeUtil.currentDate(DateTimeUtil.HH_MM_SS_PATTERN);
-        if(!elasticsearchTemplate.indexExists(indexName)){
-            elasticsearchTemplate.createIndex(indexName);
+            Map<String, Object> map = new HashMap<>();
+            map.put("orderCount", 7);
+            map.put("rt", 15);
+            map.put("issuccess", "false");
+            map.put("tracer_id", "123qwe");
+            goodsInfo.setExt(map);
 
-            ElasticsearchPersistentEntity persistentEntity = elasticsearchTemplate.getPersistentEntityFor(GoodsInfo.class);
-            XContentBuilder xContentBuilder = this.createXContentBuilder(persistentEntity, GoodsInfo.class);
-            elasticsearchTemplate.putMapping(indexName, "goods", xContentBuilder);
+            String indexName = "testgoods_" + DateTimeUtil.currentDate(DateTimeUtil.YYYYMMDD_PATTERN);
+            if (!elasticsearchTemplate.indexExists(indexName)) {
+                if (elasticsearchTemplate.createIndex(indexName)) {
+                    ElasticsearchPersistentEntity persistentEntity = elasticsearchTemplate.getPersistentEntityFor(GoodsInfo.class);
+                    XContentBuilder xContentBuilder = this.createXContentBuilder(persistentEntity, GoodsInfo.class);
+                    elasticsearchTemplate.putMapping(indexName, "goods", xContentBuilder);
+                }
+            }
+
+            IndexQueryBuilder indexQueryBuilder = new IndexQueryBuilder().withIndexName(indexName).withType("goods").withObject(goodsInfo);
+            elasticsearchTemplate.index(indexQueryBuilder.build());
         }
-
-        IndexQueryBuilder indexQueryBuilder = new IndexQueryBuilder().withIndexName(indexName).withType("goods").withObject(goodsInfo);
-        elasticsearchTemplate.index(indexQueryBuilder.build());
 
         return "success";
     }
